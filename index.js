@@ -5,24 +5,12 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-
+const pool = require("./db")
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // Database connection
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'root123',
-  database: process.env.DB_NAME || 'wedding_management',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
-pool.on("connection",(stream)=>
-    console.log("New connection")
-)
 
 
 // Middleware to verify JWT token
@@ -58,7 +46,7 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
-    const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '8h' });
+    const token = jwt.sign({ id: user.id, username: user.username }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '5d' });
     res.json({ token, user: { id: user.id, username: user.username, name: user.name } });
   } catch (error) {
     console.error('Login error:', error);
@@ -67,7 +55,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Get all guests
-app.get('/api/guests', authenticateToken, async (req, res) => {
+app.get('/api/guests', async (req, res) => {
     try {
       const { relation, side, phone } = req.query;
       let query = 'SELECT * FROM guests';
@@ -144,47 +132,43 @@ app.patch('/api/guests/:id/invite', authenticateToken, async (req, res) => {
 
 // Update guest attendance status
 // Update guest attendance status and count
-app.patch('/api/guests/:id/attendance', authenticateToken, async (req, res) => {
+app.patch('/api/guests/:id/attendance', async (req, res) => {
     try {
       const { id } = req.params;
       const { is_attending, guest_count } = req.body;
       
       let query = 'UPDATE guests SET';
       const params = [];
-      
-      // Check which fields to update
+      const setStatements = [];
+  
       if (is_attending !== undefined) {
-        query += ' is_attending = ?';
+        setStatements.push(' is_attending = ?');
         params.push(is_attending);
       }
-      
+  
       if (guest_count !== undefined) {
-        // If we've already added is_attending, we need a comma
-        if (params.length > 0) {
-          query += ',';
-        }
-        query += ' guest_count = ?';
+        setStatements.push(' guest_count = ?');
         params.push(guest_count);
       }
-      
-      // Add the WHERE clause
+  
+      // Always mark has_responded true when this route is hit
+      setStatements.push(' has_responded = TRUE');
+  
+      // Final query
+      query += setStatements.join(',');
       query += ' WHERE id = ?';
       params.push(id);
-      
-      // Only proceed if we have something to update
-      if (params.length > 1) {
-        await pool.query(query, params);
-        
-        const [updated] = await pool.query('SELECT * FROM guests WHERE id = ?', [id]);
-        res.json(updated[0]);
-      } else {
-        res.status(400).json({ message: 'No fields to update provided' });
-      }
+  
+      await pool.query(query, params);
+  
+      const [updated] = await pool.query('SELECT * FROM guests WHERE id = ?', [id]);
+      res.json(updated[0]);
     } catch (error) {
       console.error('Error updating attendance status:', error);
       res.status(500).json({ message: 'Server error' });
     }
   });
+  
 
 // Get statistics
 // Get statistics
