@@ -21,6 +21,7 @@ const authenticateToken = (req, res, next) => {
   if (!token) return res.status(401).json({ message: 'Unauthorized' });
   
   jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret', (err, user) => {
+    
     if (err) return res.status(403).json({ message: 'Forbidden' });
     req.user = user;
     next();
@@ -55,7 +56,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Get all guests
-app.get('/api/guests', async (req, res) => {
+app.get('/api/guests',authenticateToken, async (req, res) => {
     try {
       const { relation, side, phone } = req.query;
       let query = 'SELECT * FROM guests';
@@ -133,41 +134,56 @@ app.patch('/api/guests/:id/invite', authenticateToken, async (req, res) => {
 // Update guest attendance status
 // Update guest attendance status and count
 app.patch('/api/guests/:id/attendance', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { is_attending, guest_count } = req.body;
-      
-      let query = 'UPDATE guests SET';
-      const params = [];
-      const setStatements = [];
-  
-      if (is_attending !== undefined) {
-        setStatements.push(' is_attending = ?');
-        params.push(is_attending);
-      }
-  
-      if (guest_count !== undefined) {
-        setStatements.push(' guest_count = ?');
-        params.push(guest_count);
-      }
-  
-      // Always mark has_responded true when this route is hit
-      setStatements.push(' has_responded = TRUE');
-  
-      // Final query
-      query += setStatements.join(',');
-      query += ' WHERE id = ?';
-      params.push(id);
-  
-      await pool.query(query, params);
-  
-      const [updated] = await pool.query('SELECT * FROM guests WHERE id = ?', [id]);
-      res.json(updated[0]);
-    } catch (error) {
-      console.error('Error updating attendance status:', error);
-      res.status(500).json({ message: 'Server error' });
+  try {
+    const { id } = req.params;
+    const { is_attending, guest_count } = req.body;
+    
+    // First, check if the guest exists and is invited
+    const [guest] = await pool.query('SELECT * FROM guests WHERE id = ?', [id]);
+    
+    if (guest.length === 0) {
+      return res.status(404).json({ message: 'Guest not found' });
     }
-  });
+    
+    if (!guest[0].is_invited) {
+      return res.status(403).json({ 
+        message: 'Cannot update attendance for uninvited guest',
+        is_invited: false
+      });
+    }
+    
+    // Continue with the update if the guest is invited
+    let query = 'UPDATE guests SET';
+    const params = [];
+    const setStatements = [];
+
+    if (is_attending !== undefined) {
+      setStatements.push(' is_attending = ?');
+      params.push(is_attending);
+    }
+
+    if (guest_count !== undefined) {
+      setStatements.push(' guest_count = ?');
+      params.push(guest_count);
+    }
+
+    // Always mark has_responded true when this route is hit
+    setStatements.push(' has_responded = TRUE');
+
+    // Final query
+    query += setStatements.join(',');
+    query += ' WHERE id = ?';
+    params.push(id);
+
+    await pool.query(query, params);
+
+    const [updated] = await pool.query('SELECT * FROM guests WHERE id = ?', [id]);
+    res.json(updated[0]);
+  } catch (error) {
+    console.error('Error updating attendance status:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
   
 
 // Get statistics
