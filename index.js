@@ -106,6 +106,16 @@ app.post('/api/guests', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: 'All fields are required' });
     }
     
+    // Check if a guest with this phone number already exists
+    const [existingGuest] = await pool.query('SELECT * FROM guests WHERE phone = ?', [phone]);
+    
+    if (existingGuest.length > 0) {
+      return res.status(409).json({ 
+        message: 'A guest with this phone number already exists',
+        existingGuest: existingGuest[0]
+      });
+    }
+    
     const [result] = await pool.query(
         'INSERT INTO guests (name, phone, relation, side, guest_count) VALUES (?, ?, ?, ?, ?)',
         [name, phone, relation, side, guest_count]
