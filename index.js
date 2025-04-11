@@ -137,13 +137,13 @@ app.patch('/api/guests/:id/invite', authenticateToken, async (req, res) => {
 
 // Update guest attendance status
 // Update guest attendance status and count
-app.patch('/api/guests/:id/attendance', async (req, res) => {
+app.patch('/api/guests/:phone/attendance', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { phone } = req.params;
     const { is_attending, attending_guest_count } = req.body;
     
     // First, check if the guest exists and is invited
-    const [guest] = await pool.query('SELECT * FROM guests WHERE id = ?', [id]);
+    const [guest] = await pool.query('SELECT * FROM guests WHERE phone = ?', [phone]);
     
     if (guest.length === 0) {
       return res.status(404).json({ message: 'Guest not found' });
@@ -176,12 +176,12 @@ app.patch('/api/guests/:id/attendance', async (req, res) => {
 
     // Final query
     query += setStatements.join(',');
-    query += ' WHERE id = ?';
-    params.push(id);
+    query += ' WHERE phone = ?';
+    params.push(phone);
 
     await pool.query(query, params);
 
-    const [updated] = await pool.query('SELECT * FROM guests WHERE id = ?', [id]);
+    const [updated] = await pool.query('SELECT * FROM guests WHERE phone = ?', [phone]);
     res.json(updated[0]);
   } catch (error) {
     console.error('Error updating attendance status:', error);
