@@ -9,6 +9,8 @@ const pool = require("./db")
 const app = express();
 app.use(cors());
 app.use(express.json());
+const { MessagingResponse } = require('twilio').twiml;
+
 
 // Database connection
 
@@ -27,6 +29,8 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+
 
 // Login route
 app.post('/api/login', async (req, res) => {
@@ -136,7 +140,7 @@ app.patch('/api/guests/:id/invite', authenticateToken, async (req, res) => {
 app.patch('/api/guests/:id/attendance', async (req, res) => {
   try {
     const { id } = req.params;
-    const { is_attending, guest_count } = req.body;
+    const { is_attending, attending_guest_count } = req.body;
     
     // First, check if the guest exists and is invited
     const [guest] = await pool.query('SELECT * FROM guests WHERE id = ?', [id]);
@@ -162,9 +166,9 @@ app.patch('/api/guests/:id/attendance', async (req, res) => {
       params.push(is_attending);
     }
 
-    if (guest_count !== undefined) {
-      setStatements.push(' guest_count = ?');
-      params.push(guest_count);
+    if (attending_guest_count !== undefined) {
+      setStatements.push(' attending_guest_count = ?');
+      params.push(attending_guest_count);
     }
 
     // Always mark has_responded true when this route is hit
@@ -198,7 +202,7 @@ app.get('/api/statistics', authenticateToken, async (req, res) => {
       
       // Get total number of people attending (sum of guest_count for attending guests)
       const [totalAttendingCount] = await pool.query(`
-        SELECT SUM(guest_count) as count 
+        SELECT SUM(attending_guest_count) as count 
         FROM guests 
         WHERE is_attending = TRUE
       `);
@@ -237,7 +241,19 @@ app.delete('/api/guests/:id', authenticateToken, async (req, res) => {
   }
 });
 
+
+//twilio
+app.post('/sms', (req, res) => {
+  const twiml = new MessagingResponse();
+
+  twiml.message('The Robots are coming! Head for the hills!');
+
+  res.type('text/xml').send(twiml.toString());
+});
+
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
